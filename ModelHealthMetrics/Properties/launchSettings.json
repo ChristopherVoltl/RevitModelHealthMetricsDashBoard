@@ -1,0 +1,11 @@
+{
+  "profiles": {
+    "ModelHealthMetrics": {
+      "commandName": "Project"
+    },
+    "RevitDebug": {
+      "commandName": "Executable",
+      "executablePath": "X:\\Revit\\Revit 2025\\Revit.exe"
+    }
+  }
+}
