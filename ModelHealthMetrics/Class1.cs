@@ -16,13 +16,14 @@ namespace Modelhealth
 
     public class ModelHealthMetrics : IExternalCommand
     {
-        public string CreateJsonPayload(int totalElements, int warningCount, Dictionary<string, int> familyInstances)
+        public string CreateJsonPayload(int totalElements, int warningCount)
         {
             var json = new
-            {
+            {     
+
                 TotalElements = totalElements,
                 Warnings = warningCount,
-                Families = familyInstances
+                //Families = familyInstances
             };
 
             return JsonConvert.SerializeObject(json);
@@ -43,11 +44,18 @@ namespace Modelhealth
                 $"Total Elements: {totalElements}\nWarnings: {warningCount}");
 
             // Prepare the JSON payload
-            string jsonPayload = CreateJsonPayload(totalElements, warningCount, familyInstances);
+            string jsonPayload = CreateJsonPayload(totalElements, warningCount);
 
-            // Send the payload to Power BI
-            PowerBIPush powerBIPush = new PowerBIPush();
-            Task.Run(() => powerBIPush.PushDataToPowerBI(jsonPayload)).Wait();
+            // Create and run a task to send the payload to Power BI asynchronously
+            Task powerBIPushTask = Task.Run(async () =>
+            {
+                PowerBIPush powerBIPush = new PowerBIPush();
+                await powerBIPush.PushDataToPowerBI(jsonPayload);
+            });
+
+            // Wait for the task to complete but avoid blocking the UI thread
+            powerBIPushTask.GetAwaiter().GetResult();
+
 
             TaskDialog.Show("Revit Model Health", "Data has been successfully sent to Power BI.");
 
@@ -84,21 +92,29 @@ namespace Modelhealth
 
     
     public class PowerBIPush
-    {   
-        // PowerBI API URL
-        private static readonly string apiUrl = "https://api.powerbi.com/beta/e66e77b4-5724-44d7-8721-06df160450ce/datasets/784e3d0c-eda4-431a-bf73-c49de06cf829/rows?experience=power-bi&key=Sjy3QOn2VB7ZbDXUJYRUEfhEC3vwTnB9VDHMRcn4p8IViv%2B2eE73IBRfzBUDmYvyiLqPNe%2FayWra%2FeYQ1hKHyg%3D%3D";
-
+    {
         public async Task PushDataToPowerBI(string jsonPayload)
         {
             using (HttpClient client = new HttpClient())
             {
-                var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
-                HttpResponseMessage response = await client.PostAsync(apiUrl, content);
+                // PowerBI API URL
+                string powerBiApiUrl = "https://api.powerbi.com/beta/e66e77b4-5724-44d7-8721-06df160450ce/datasets/07efce07-a7ee-4998-88a6-3adcb6feb25e/rows?experience=power-bi&key=RSQali93QiMzk53VCFG1OmXKXXvkpDujTYpkM8DfNjxB4o0CZ16uIiFciXYFi9JjYtQ2H0mjz3ztwHksnDQkfQ%3D%3D";
 
-                if (!response.IsSuccessStatusCode)
+                var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+
+                try
                 {
-                    // Handle errors here
-                    throw new Exception("Failed to post data to PowerBI");
+                    HttpResponseMessage response = await client.PostAsync(powerBiApiUrl, content);
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        string responseBody = await response.Content.ReadAsStringAsync();
+                        throw new Exception($"Failed to post data to Power BI: {response.StatusCode} {response.ReasonPhrase}. Response body: {responseBody}");
+                    }
+                }
+                catch (HttpRequestException ex)
+                {
+                    throw new Exception($"Error connecting to Power BI: {ex.Message}");
                 }
             }
         }
